@@ -1,1 +1,22 @@
 # snmCAT-seq_integration
+
+This repo is associated with the cross-modality integration comparison part of our [manuscript](http://dx.doi.org/10.1101/2019.12.11.873398)
+
+We tested five data integration tools: 1) Scanorama(Hie et al., 2019); 2) Harmony(Korsunsky et al., 2019); 3) Seurat(Stuart et al., 2020), as well as 4) LIGER (Gao et al., 2020; Welch et al., 2019) and 5) SingleCellFusion (the present study). For tools 1 to 3, we used the same set of highly variable genes (HVG, Top 2000 genes identified by Seurat FindVariableGenes function) identified from the transcriptome matrix as starting features; for algorithms 4 and 5, we used top 5000 genes having the highest correlation between their RNA and mCH level. These genes were chosen based on their overall accuracy (see below). We reversed the methylation values (i.e. max(X) - X, where X denotes the cell-by-gene methylation fraction matrix) before integration to account for the negative correlation of mCH fraction and RNA expression.
+
+## Integrate mC and RNA matrices with different tools
+
+Here we describe the integration process of each tool, all the tools start from the per cell normalized RNA-HVG matrix and reversed mCH-HVG matrix. After getting the decomposed matrix (PCs from 1,2,3,5 or H matrix from 4), we then evaluate the integration performance using metrics described below. For reproducibility, we uploaded all the steps and input files here: https://github.com/lhqing/snmCAT-seq_integration
+
+- For scanorama, we used these parameters (sigma=100, alpha=0.1, knn=30) to perform the integration and dimension reduction using Scanorama V1.7 on the scaled (via scanpy.pp.scale) mC and RNA matrix. We used the top 20 integrated PCs (n_components = 20) for integration evaluation.
+Unlike scanorama, Harmony directly takes dimension reduction matrix as input. Therefore, we first run PCA separately (n_components = 20) on the scaled mCH and RNA matrix first, and run Harmony (pyharmony from https://github.com/jterrace/pyharmony) with default parameters on the concatenated PCs. Harmony integrated PCs were then used for evaluation.
+-For Seurat, we followed the Seurat (v4.0.0) vignette steps to perform integration (https://satijalab.org/seurat/articles/integration_introduction.html). When calculating integration anchors (FindTransferAnchors), we use the RNA matrix as the reference matrix and mCH matrix as the query matrix and using CCA as the dimension reduction method. We then transfer the mCH matrix to the RNA space using the anchors and run PCA (n_components = 20) on the concatenated (mCH and RNA) matrix after the transfer.
+-For LIGER, we followed the tutorial from developers (http://htmlpreview.github.io/?https://github.com/welch-lab/liger/blob/master/vignettes/online_iNMF_tutorial.html) and used the online_iNMF algorithm (Gao et al., 2020) with default parameters to perform integration and used the normalized matrix H (the cells’ decomposed matrix from the online iNMF algorithm) for integration evaluation.
+-Finally, the SingleCellFusion analysis was described in the manuscript, we used the integrated PCs for evaluation.
+
+## Metrics for integration evaluation
+
+We used three different approaches to evaluate the integration results. 
+- Co-embedding: We ran UMAP on the decomposed matrix from each tool to provide an overview of the integrated dataset.
+- Cell-level: We utilize the ground-truth information from the snmCAT-seq to calculate a self-radius at the single-cell level. Specifically, we first construct a nearest-neighbor index using Annoy (v1.17.0) on the decomposed matrix (euclidean distance). For the same cell, if its RNA vector is the mCH vector's Kth neighbor, we then use d=K as the self-radius. The quality of the integration can be normalized by d/2N, where N is the total number of snmCAT-seq cells involved in the analysis. The value of d/2N ranges from 0 to 1, with smaller values indicating good integration and larger values indicating inadequate integration of mC and RNA profiles of a cell.
+- Cluster-level: The same as Fig. 2I, we performed Leiden co-clustering on the decomposed matrix (with different resolution parameters to get 17 co-clusters in all tools, which is the number of the major cell types) and calculated the co-cluster accuracy as the fraction of cells whose RNA and mC profiles were assigned to the same cluster. This accuracy can be calculated for each co-cluster or the whole dataset. Higher accuracy means good integration, and a low accuracy indicates inadequate integration. 
